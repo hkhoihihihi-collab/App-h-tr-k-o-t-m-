@@ -2,46 +2,22 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HỖ TRỢ KÉO TÂM OB54⚡</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="scanlines"></div>
-<div class="particles" aria-hidden="true"></div>
-
-<main class="app">
-  <section class="panel" id="panel">
-    <div class="corner c1"></div><div class="corner c2"></div>
-    <div class="corner c3"></div><div class="corner c4"></div>
-
+<div class="app">
+  <section class="panel">
     <div class="logo">⚡</div>
     <h1>HỖ TRỢ KÉO TÂM OB54</h1>
     <div class="subtitle">SECURE KEY SYSTEM</div>
-
-    <div class="key-wrap">
-      <input id="keyInput" type="text" placeholder="NHẬP KEY..." autocomplete="off" spellcheck="false">
-    </div>
-
-    <button class="action" id="activateBtn">KÍCH HOẠT</button>
-    <button class="secondary" id="demoBtn">KIỂM TRA GIAO DIỆN</button>
-
-    <div id="status" class="status">ĐANG CHỜ KEY...</div>
+    <input id="keyInput" placeholder="NHẬP KEY..." autocomplete="off">
+    <button id="verifyBtn">XÁC MINH KEY</button>
+    <div id="status">ĐANG CHỜ KEY...</div>
+    <div id="keyInfo" class="hidden"></div>
   </section>
-
-  <section class="home hidden" id="home">
-    <div class="home-title">HỆ THỐNG ĐÃ KÍCH HOẠT</div>
-    <div class="home-line"></div>
-    <div class="home-grid">
-      <button class="tool-btn">⚡ KÉO TÂM</button>
-      <button class="tool-btn">🎯 HỖ TRỢ AIM</button>
-      <button class="tool-btn">◈ CẤU HÌNH</button>
-      <button class="tool-btn">↻ LÀM MỚI</button>
-    </div>
-  </section>
-</main>
-
-<div id="toast" class="toast"></div>
+</div>
 <script src="script.js"></script>
 </body>
 </html>
