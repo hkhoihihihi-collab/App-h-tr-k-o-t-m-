@@ -1,12 +1,10 @@
 const API = "https://hk-key-manager.onrender.com/api";
 
 const keyInput = document.getElementById("keyInput");
-const deviceInput = document.getElementById("deviceInput");
 const checkBtn = document.getElementById("checkBtn");
 const activateBtn = document.getElementById("activateBtn");
 const pasteBtn = document.getElementById("pasteBtn");
 const clearBtn = document.getElementById("clearBtn");
-const copyBtn = document.getElementById("copyBtn");
 const contactBtn = document.getElementById("contactBtn");
 const result = document.getElementById("result");
 const statusTitle = document.getElementById("statusTitle");
@@ -40,7 +38,6 @@ function getDeviceId(){
   return id;
 }
 
-deviceInput.value = getDeviceId();
 
 function formatExpiry(value){
   if(value === null || value === undefined || value === ""){
@@ -195,24 +192,13 @@ clearBtn.addEventListener("click", ()=>{
   beep(420);
   keyInput.value = "";
   keyDetails.classList.add("hidden");
-  setStatus("Sẵn sàng.","Nhập key rồi bấm “Kiểm tra key”.");
+  setStatus("Sẵn sàng.","Chưa Kích Hoạt");
   keyInput.focus();
 });
 
-copyBtn.addEventListener("click", async ()=>{
-  beep(560);
-  try{
-    await navigator.clipboard.writeText(getDeviceId());
-    setStatus("ĐÃ SAO CHÉP","Mã thiết bị đã được sao chép.","success");
-  }catch(e){
-    setStatus("KHÔNG THỂ SAO CHÉP","Hãy nhấn giữ mã thiết bị để sao chép.","error");
-  }
-});
 
-contactBtn.addEventListener("click", ()=>{
-  beep(600);
-  setStatus("LIÊN HỆ LẤY KEY","Nút này sẽ được nối tới kênh liên hệ của mày ở bước sau.");
-});
+
+
 
 keyInput.addEventListener("input", ()=>{
   keyInput.value = keyInput.value.toUpperCase();
