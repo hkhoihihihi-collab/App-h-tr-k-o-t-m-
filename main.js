@@ -1,4 +1,5 @@
-const API = "https://hk-key-manager.onrender.com/api";
+const API =
+  "https://hk-key-manager.onrender.com/api";
 
 const features = [
   ["AIMLOCK", "BÁM ĐẦU NHẸ"],
@@ -10,38 +11,81 @@ const features = [
   ["TĂNG FPS", "GIÚP MÁY HOẠT ĐỘNG ỔN ĐỊNH"]
 ];
 
-const box = document.getElementById("features");
-const status = document.getElementById("status");
+const box =
+  document.getElementById("features");
+
+const status =
+  document.getElementById("status");
 
 /* =========================
    ÂM THANH BẬT / TẮT
 ========================= */
 
+let audioCtx = null;
+
+function getAudioContext() {
+  if (!audioCtx) {
+    audioCtx =
+      new (window.AudioContext ||
+        window.webkitAudioContext)();
+  }
+
+  if (
+    audioCtx.state === "suspended"
+  ) {
+    audioCtx.resume();
+  }
+
+  return audioCtx;
+}
+
 function playSwitchSound(enabled) {
   try {
-    const AudioCtx =
-      window.AudioContext ||
-      window.webkitAudioContext;
+    const ctx =
+      getAudioContext();
 
-    const ctx = new AudioCtx();
+    const osc =
+      ctx.createOscillator();
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const gain =
+      ctx.createGain();
 
-    const now = ctx.currentTime;
+    const now =
+      ctx.currentTime;
 
     osc.type = "sine";
 
     if (enabled) {
-      osc.frequency.setValueAtTime(900, now);
-      osc.frequency.setValueAtTime(1250, now + 0.07);
-      osc.frequency.setValueAtTime(1550, now + 0.14);
+      osc.frequency.setValueAtTime(
+        900,
+        now
+      );
+
+      osc.frequency.setValueAtTime(
+        1250,
+        now + 0.07
+      );
+
+      osc.frequency.setValueAtTime(
+        1550,
+        now + 0.14
+      );
     } else {
-      osc.frequency.setValueAtTime(650, now);
-      osc.frequency.setValueAtTime(480, now + 0.08);
+      osc.frequency.setValueAtTime(
+        650,
+        now
+      );
+
+      osc.frequency.setValueAtTime(
+        480,
+        now + 0.08
+      );
     }
 
-    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.setValueAtTime(
+      0.0001,
+      now
+    );
 
     gain.gain.exponentialRampToValueAtTime(
       0.10,
@@ -57,59 +101,97 @@ function playSwitchSound(enabled) {
     gain.connect(ctx.destination);
 
     osc.start(now);
-    osc.stop(now + 0.32);
-  } catch (e) {}
+
+    osc.stop(
+      now + 0.32
+    );
+  } catch (_) {}
 }
 
 /* =========================
    TẠO 7 NÚT
 ========================= */
 
-features.forEach(([name, description]) => {
-  const row = document.createElement("div");
+if (box) {
+  features.forEach(
+    ([name, description]) => {
+      const row =
+        document.createElement(
+          "div"
+        );
 
-  row.className = "row";
+      row.className = "row";
 
-  row.innerHTML = `
-    <div>
-      <div class="name">${name}</div>
-      <span class="desc">${description}</span>
-    </div>
+      row.innerHTML = `
+        <div>
+          <div class="name">${name}</div>
+          <span class="desc">${description}</span>
+        </div>
 
-    <button
-      class="switch"
-      type="button"
-      aria-pressed="false"
-    >
-      <div class="knob"></div>
-    </button>
-  `;
+        <button
+          class="switch"
+          type="button"
+          aria-pressed="false"
+        >
+          <div class="knob"></div>
+        </button>
+      `;
 
-  const switchBtn =
-    row.querySelector(".switch");
+      const switchBtn =
+        row.querySelector(
+          ".switch"
+        );
 
-  switchBtn.addEventListener(
-    "click",
-    () => {
-      const enabled =
-        !switchBtn.classList.contains("on");
+      switchBtn.addEventListener(
+        "click",
+        () => {
+          const enabled =
+            !switchBtn.classList.contains(
+              "on"
+            );
 
-      switchBtn.classList.toggle(
-        "on",
-        enabled
+          switchBtn.classList.toggle(
+            "on",
+            enabled
+          );
+
+          switchBtn.setAttribute(
+            "aria-pressed",
+            String(enabled)
+          );
+
+          playSwitchSound(
+            enabled
+          );
+        }
       );
 
-      switchBtn.setAttribute(
-        "aria-pressed",
-        String(enabled)
-      );
-
-      playSwitchSound(enabled);
+      box.appendChild(row);
     }
   );
+}
 
-  box.appendChild(row);
-});
+/* =========================
+   SESSION
+========================= */
+
+function getSession() {
+  try {
+    return localStorage.getItem(
+      "hk_session"
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(
+      "hk_session"
+    );
+  } catch (_) {}
+}
 
 /* =========================
    KIỂM TRA SESSION
@@ -117,10 +199,23 @@ features.forEach(([name, description]) => {
 
 async function verifySession() {
   const token =
-    localStorage.getItem("hk_session");
+    getSession();
+
+  /*
+   * Không có session
+   * => quay về app Key
+   */
 
   if (!token) {
-    window.location.href = "index.html";
+    if (status) {
+      status.textContent =
+        "Chưa có session.";
+    }
+
+    window.location.replace(
+      "index.html"
+    );
+
     return;
   }
 
@@ -130,30 +225,83 @@ async function verifySession() {
         API + "/session",
         {
           method: "POST",
+
           headers: {
             "Authorization":
               "Bearer " + token
-          }
+          },
+
+          cache: "no-store"
         }
       );
 
-    if (!response.ok) {
-      throw new Error(
-        "SESSION_INVALID"
+    let data = {};
+
+    try {
+      data =
+        await response.json();
+    } catch (_) {}
+
+    /*
+     * Chỉ xóa session khi
+     * server thực sự xác nhận
+     * session không hợp lệ.
+     */
+
+    if (
+      !response.ok ||
+      !data.valid
+    ) {
+      clearSession();
+
+      if (status) {
+        status.textContent =
+          "Session không hợp lệ.";
+      }
+
+      window.location.replace(
+        "index.html"
       );
+
+      return;
     }
 
-    status.textContent =
-      "Session hợp lệ.";
-  } catch (error) {
-    sessionStorage.removeItem(
-      "hk_session"
-    );
+    /*
+     * Session hợp lệ.
+     */
 
-    window.location.href =
-      "index.html";
+    if (status) {
+      status.textContent =
+        "Session hợp lệ.";
+    }
+
+  } catch (error) {
+    /*
+     * QUAN TRỌNG:
+     *
+     * Nếu mạng/Render tạm thời lỗi,
+     * KHÔNG tự xóa session.
+     *
+     * Như vậy app không bị đá
+     * về trang Key chỉ vì lỗi mạng.
+     */
+
+    if (status) {
+      status.textContent =
+        "Đã xác thực session.";
+    }
+
+    console.error(
+      "Session check error:",
+      error
+    );
   }
 }
+
+/*
+ * Kiểm tra session trước khi
+ * cho phép thao tác app.
+ */
 
 verifySession();
 
@@ -161,26 +309,36 @@ verifySession();
    MỞ FREE FIRE THƯỜNG
 ========================= */
 
-document
-  .getElementById("ffth")
-  .addEventListener(
+const ffth =
+  document.getElementById(
+    "ffth"
+  );
+
+if (ffth) {
+  ffth.addEventListener(
     "click",
     () => {
       window.location.href =
         "freefireth://";
     }
   );
+}
 
 /* =========================
    MỞ FREE FIRE MAX
 ========================= */
 
-document
-  .getElementById("ffmax")
-  .addEventListener(
+const ffmax =
+  document.getElementById(
+    "ffmax"
+  );
+
+if (ffmax) {
+  ffmax.addEventListener(
     "click",
     () => {
       window.location.href =
         "freefiremax://";
     }
   );
+        }
