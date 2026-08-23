@@ -1,41 +1,186 @@
-const API="https://hk-key-manager.onrender.com/api";
-const features=[
- ["AIMLOCK","AimHelpService.json"],
- ["HEADLOCK","HeadLock.cpp"],
- ["NHẸ TÂM","Nhetam.cpp"],
- ["FIX RUNG","Fix Rung.cpp"],
- ["FIX LỖ","AimlockConfig"],
- ["TĂNG TỐC MÁY","AimLock toiuiu.cpp"],
- ["TĂNG FPS","Tối Ưu.cpp"]
-];
-const box=document.getElementById("features"),status=document.getElementById("status");
-function sound(on){
- try{
-  const C=window.AudioContext||window.webkitAudioContext,c=new C(),o=c.createOscillator(),g=c.createGain(),n=c.currentTime;
-  o.type="sine";
-  if(on){o.frequency.setValueAtTime(900,n);o.frequency.setValueAtTime(1250,n+.07);o.frequency.setValueAtTime(1550,n+.14)}
-  else{o.frequency.setValueAtTime(650,n);o.frequency.setValueAtTime(480,n+.08)}
-  g.gain.setValueAtTime(.0001,n);g.gain.exponentialRampToValueAtTime(.10,n+.012);g.gain.exponentialRampToValueAtTime(.0001,n+.28);
-  o.connect(g);g.connect(c.destination);o.start();o.stop(n+.32);
- }catch(e){}
-}
-features.forEach(([name,file])=>{
- const row=document.createElement("div");row.className="row";
- row.innerHTML=`<div><div class="name">${name}</div><span class="file">${file}</span></div><button class="switch" aria-pressed="false"><div class="knob"></div></button>`;
- const sw=row.querySelector(".switch");
- sw.addEventListener("click",()=>{const on=!sw.classList.contains("on");sw.classList.toggle("on",on);sw.setAttribute("aria-pressed",String(on));sound(on)});
- box.appendChild(row);
-});
-async function verify(){
- const token=sessionStorage.getItem("hk_session");
- if(!token){location.href="index.html";return}
- try{
-  const r=await fetch(API+"/session",{method:"POST",headers:{Authorization:"Bearer "+token}});
-  if(!r.ok) throw new Error();
-  status.textContent="Session hợp lệ.";
- }catch(e){sessionStorage.removeItem("hk_session");location.href="index.html"}
-}
-verify();
+const API = "https://hk-key-manager.onrender.com/api";
 
-document.getElementById("ffth").onclick=()=>location.href="freefireth://";
-document.getElementById("ffmax").onclick=()=>location.href="freefiremax://";
+const features = [
+  ["AIMLOCK", "BÁM ĐẦU NHẸ"],
+  ["HEADLOCK", "GHIM NHẸ VÙNG ĐẦU"],
+  ["NHẸ TÂM", "GIÚP TÂM NHẸ HƠN KHI KÉO"],
+  ["FIX RUNG", "GIÚP TÂM ỔN ĐỊNH KHI KÉO"],
+  ["FIX LỖ", "GIẢM HUỐT ĐẦU KHI KÉO"],
+  ["TĂNG TỐC MÁY", "DỌN DẸP BỘ NHỚ GIẢI PHÓNG RAM"],
+  ["TĂNG FPS", "GIÚP MÁY HOẠT ĐỘNG ỔN ĐỊNH"]
+];
+
+const box = document.getElementById("features");
+const status = document.getElementById("status");
+
+/* =========================
+   ÂM THANH BẬT / TẮT
+========================= */
+
+function playSwitchSound(enabled) {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      window.webkitAudioContext;
+
+    const ctx = new AudioCtx();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    const now = ctx.currentTime;
+
+    osc.type = "sine";
+
+    if (enabled) {
+      osc.frequency.setValueAtTime(900, now);
+      osc.frequency.setValueAtTime(1250, now + 0.07);
+      osc.frequency.setValueAtTime(1550, now + 0.14);
+    } else {
+      osc.frequency.setValueAtTime(650, now);
+      osc.frequency.setValueAtTime(480, now + 0.08);
+    }
+
+    gain.gain.setValueAtTime(0.0001, now);
+
+    gain.gain.exponentialRampToValueAtTime(
+      0.10,
+      now + 0.012
+    );
+
+    gain.gain.exponentialRampToValueAtTime(
+      0.0001,
+      now + 0.28
+    );
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.32);
+  } catch (e) {}
+}
+
+/* =========================
+   TẠO 7 NÚT
+========================= */
+
+features.forEach(([name, description]) => {
+  const row = document.createElement("div");
+
+  row.className = "row";
+
+  row.innerHTML = `
+    <div>
+      <div class="name">${name}</div>
+      <span class="desc">${description}</span>
+    </div>
+
+    <button
+      class="switch"
+      type="button"
+      aria-pressed="false"
+    >
+      <div class="knob"></div>
+    </button>
+  `;
+
+  const switchBtn =
+    row.querySelector(".switch");
+
+  switchBtn.addEventListener(
+    "click",
+    () => {
+      const enabled =
+        !switchBtn.classList.contains("on");
+
+      switchBtn.classList.toggle(
+        "on",
+        enabled
+      );
+
+      switchBtn.setAttribute(
+        "aria-pressed",
+        String(enabled)
+      );
+
+      playSwitchSound(enabled);
+    }
+  );
+
+  box.appendChild(row);
+});
+
+/* =========================
+   KIỂM TRA SESSION
+========================= */
+
+async function verifySession() {
+  const token =
+    sessionStorage.getItem("hk_session");
+
+  if (!token) {
+    window.location.href = "index.html";
+    return;
+  }
+
+  try {
+    const response =
+      await fetch(
+        API + "/session",
+        {
+          method: "POST",
+          headers: {
+            "Authorization":
+              "Bearer " + token
+          }
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        "SESSION_INVALID"
+      );
+    }
+
+    status.textContent =
+      "Session hợp lệ.";
+  } catch (error) {
+    sessionStorage.removeItem(
+      "hk_session"
+    );
+
+    window.location.href =
+      "index.html";
+  }
+}
+
+verifySession();
+
+/* =========================
+   MỞ FREE FIRE THƯỜNG
+========================= */
+
+document
+  .getElementById("ffth")
+  .addEventListener(
+    "click",
+    () => {
+      window.location.href =
+        "freefireth://";
+    }
+  );
+
+/* =========================
+   MỞ FREE FIRE MAX
+========================= */
+
+document
+  .getElementById("ffmax")
+  .addEventListener(
+    "click",
+    () => {
+      window.location.href =
+        "freefiremax://";
+    }
+  );
