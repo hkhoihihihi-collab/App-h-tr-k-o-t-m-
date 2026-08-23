@@ -22,7 +22,7 @@ function hkTone(
   freq,
   duration = 0.12,
   delay = 0,
-  volume = 0.045
+  volume = 0.055
 ) {
   const ctx = hkAudio();
   const now = ctx.currentTime + delay;
@@ -34,10 +34,12 @@ function hkTone(
   osc.frequency.setValueAtTime(freq, now);
 
   gain.gain.setValueAtTime(0.0001, now);
+
   gain.gain.exponentialRampToValueAtTime(
     volume,
     now + 0.012
   );
+
   gain.gain.exponentialRampToValueAtTime(
     0.0001,
     now + duration
@@ -53,25 +55,25 @@ function hkTone(
 function hkSound(type) {
   try {
     if (type === "click") {
-      hkTone(880, 0.07);
-      hkTone(1175, 0.09, 0.055);
+      hkTone(880, 0.075, 0, 0.055);
+      hkTone(1175, 0.095, 0.055, 0.055);
     }
 
     if (type === "success") {
-      hkTone(784, 0.10);
-      hkTone(988, 0.10, 0.085);
-      hkTone(1175, 0.15, 0.17);
+      hkTone(784, 0.10, 0, 0.06);
+      hkTone(988, 0.10, 0.085, 0.06);
+      hkTone(1175, 0.16, 0.17, 0.065);
     }
 
     if (type === "error") {
-      hkTone(440, 0.11);
-      hkTone(330, 0.15, 0.10);
+      hkTone(440, 0.12, 0, 0.06);
+      hkTone(330, 0.16, 0.10, 0.06);
     }
 
     if (type === "activate") {
-      hkTone(659, 0.10);
-      hkTone(784, 0.10, 0.09);
-      hkTone(988, 0.12, 0.18);
+      hkTone(659, 0.10, 0, 0.06);
+      hkTone(784, 0.10, 0.09, 0.06);
+      hkTone(988, 0.13, 0.18, 0.065);
     }
   } catch (_) {}
 }
@@ -148,7 +150,7 @@ function beep(
       ctx.createGain();
 
     osc.frequency.value = freq;
-    gain.gain.value = 0.035;
+    gain.gain.value = 0.04;
 
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -172,13 +174,25 @@ function getDeviceId() {
     );
 
   if (!id) {
-    id =
-      "HKD-" +
-      crypto
-        .randomUUID()
-        .replaceAll("-", "")
-        .slice(0, 12)
-        .toUpperCase();
+    if (
+      typeof crypto !== "undefined" &&
+      crypto.randomUUID
+    ) {
+      id =
+        "HKD-" +
+        crypto
+          .randomUUID()
+          .replaceAll("-", "")
+          .slice(0, 12)
+          .toUpperCase();
+    } else {
+      id =
+        "HKD-" +
+        Math.random()
+          .toString(36)
+          .substring(2, 14)
+          .toUpperCase();
+    }
 
     localStorage.setItem(
       "hk_device_id",
@@ -187,6 +201,47 @@ function getDeviceId() {
   }
 
   return id;
+}
+
+/* =========================
+   SESSION
+========================= */
+
+function saveSession(token) {
+  if (!token) return false;
+
+  try {
+    localStorage.setItem(
+      "hk_session",
+      token
+    );
+
+    return (
+      localStorage.getItem(
+        "hk_session"
+      ) === token
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function getSession() {
+  try {
+    return localStorage.getItem(
+      "hk_session"
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(
+      "hk_session"
+    );
+  } catch (_) {}
 }
 
 /* =========================
@@ -208,7 +263,9 @@ function formatExpiry(value) {
     return "KHÔNG XÁC ĐỊNH";
   }
 
-  return d.toLocaleString("vi-VN");
+  return d.toLocaleString(
+    "vi-VN"
+  );
 }
 
 /* =========================
@@ -220,6 +277,8 @@ function setStatus(
   detail,
   type = ""
 ) {
+  if (!result) return;
+
   result.classList.remove(
     "success",
     "error"
@@ -229,30 +288,45 @@ function setStatus(
     result.classList.add(type);
   }
 
-  statusTitle.textContent = title;
-  statusDetail.textContent = detail;
+  if (statusTitle) {
+    statusTitle.textContent =
+      title;
+  }
+
+  if (statusDetail) {
+    statusDetail.textContent =
+      detail;
+  }
 }
 
 function showDetails(
   data,
   stateText
 ) {
-  keyDetails.classList.remove(
-    "hidden"
-  );
-
-  keyState.textContent =
-    stateText;
-
-  expiry.textContent =
-    formatExpiry(
-      data.expiresAt
+  if (keyDetails) {
+    keyDetails.classList.remove(
+      "hidden"
     );
+  }
 
-  deviceState.textContent =
-    data.deviceBound
-      ? "ĐÃ GẮN 1 THIẾT BỊ"
-      : "1 THIẾT BỊ";
+  if (keyState) {
+    keyState.textContent =
+      stateText;
+  }
+
+  if (expiry) {
+    expiry.textContent =
+      formatExpiry(
+        data.expiresAt
+      );
+  }
+
+  if (deviceState) {
+    deviceState.textContent =
+      data.deviceBound
+        ? "ĐÃ GẮN 1 THIẾT BỊ"
+        : "1 THIẾT BỊ";
+  }
 }
 
 /* =========================
@@ -280,7 +354,13 @@ function errorText(
       "CHƯA NHẬP KEY",
 
     DEVICE_REQUIRED:
-      "THIẾU MÃ THIẾT BỊ"
+      "THIẾU MÃ THIẾT BỊ",
+
+    SESSION_INVALID:
+      "PHIÊN ĐĂNG NHẬP KHÔNG HỢP LỆ",
+
+    SESSION_REQUIRED:
+      "THIẾU PHIÊN ĐĂNG NHẬP"
   };
 
   return (
@@ -303,12 +383,16 @@ async function api(
       API + path,
       {
         method: "POST",
+
         headers: {
           "Content-Type":
             "application/json"
         },
+
         body:
-          JSON.stringify(body)
+          JSON.stringify(
+            body || {}
+          )
       }
     );
 
@@ -330,6 +414,10 @@ async function api(
 ========================= */
 
 function validateInput() {
+  if (!keyInput) {
+    return null;
+  }
+
   const key =
     keyInput.value
       .trim()
@@ -352,299 +440,381 @@ function validateInput() {
 
 /* =========================
    KIỂM TRA KEY
-   Không bind thiết bị
+   KHÔNG BIND DEVICE
 ========================= */
 
-checkBtn.addEventListener(
-  "click",
-  async () => {
-    beep();
+if (checkBtn) {
+  checkBtn.addEventListener(
+    "click",
+    async () => {
+      beep();
 
-    const key =
-      validateInput();
+      const key =
+        validateInput();
 
-    if (!key) return;
+      if (!key) return;
 
-    checkBtn.disabled = true;
-    activateBtn.disabled = true;
+      checkBtn.disabled = true;
 
-    keyDetails.classList.add(
-      "hidden"
-    );
+      if (activateBtn) {
+        activateBtn.disabled = true;
+      }
 
-    setStatus(
-      "ĐANG KIỂM TRA KEY",
-      "Đang kiểm tra trạng thái và HSD..."
-    );
+      if (keyDetails) {
+        keyDetails.classList.add(
+          "hidden"
+        );
+      }
 
-    try {
-      const {
-        response,
-        data
-      } = await api(
-        "/check",
-        {
-          key,
-          deviceId:
-            getDeviceId()
+      setStatus(
+        "ĐANG KIỂM TRA KEY",
+        "Đang kiểm tra trạng thái và HSD..."
+      );
+
+      try {
+        const {
+          response,
+          data
+        } = await api(
+          "/check",
+          {
+            key,
+            deviceId:
+              getDeviceId()
+          }
+        );
+
+        if (
+          !response.ok ||
+          !data.valid
+        ) {
+          setStatus(
+            errorText(
+              data.code,
+              data.message
+            ),
+            "Key không thể sử dụng.",
+            "error"
+          );
+
+          beep(
+            150,
+            0.14
+          );
+
+          return;
         }
-      );
 
-      if (
-        !response.ok ||
-        !data.valid
-      ) {
+        if (
+          data.deviceId &&
+          data.deviceId !==
+            getDeviceId()
+        ) {
+          setStatus(
+            "KEY ĐÃ GẮN THIẾT BỊ KHÁC",
+            "Không thể kích hoạt trên thiết bị này.",
+            "error"
+          );
+
+          beep(
+            150,
+            0.14
+          );
+
+          return;
+        }
+
+        const state =
+          data.deviceBound
+            ? "ĐÃ KÍCH HOẠT"
+            : "CÒN KHẢ DỤNG";
+
+        showDetails(
+          data,
+          state
+        );
+
         setStatus(
-          errorText(
-            data.code,
-            data.message
-          ),
-          "Key không thể sử dụng.",
+          "KEY HỢP LỆ",
+          "Key còn sử dụng được. Hãy bấm Kích hoạt nếu đây là thiết bị của bạn.",
+          "success"
+        );
+
+        hkSound("success");
+      } catch (_) {
+        setStatus(
+          "LỖI KẾT NỐI",
+          "Không thể kết nối máy chủ Render.",
           "error"
         );
 
-        beep(150, 0.14);
-        return;
+        hkSound("error");
+      } finally {
+        checkBtn.disabled = false;
+
+        if (activateBtn) {
+          activateBtn.disabled = false;
+        }
       }
-
-      if (
-        data.deviceId &&
-        data.deviceId !==
-          getDeviceId()
-      ) {
-        setStatus(
-          "KEY ĐÃ GẮN THIẾT BỊ KHÁC",
-          "Không thể kích hoạt trên thiết bị này.",
-          "error"
-        );
-
-        beep(150, 0.14);
-        return;
-      }
-
-      const state =
-        data.deviceBound
-          ? "ĐÃ KÍCH HOẠT"
-          : "CÒN KHẢ DỤNG";
-
-      showDetails(
-        data,
-        state
-      );
-
-      setStatus(
-        "KEY HỢP LỆ",
-        "Key còn sử dụng được. Hãy bấm Kích hoạt nếu đây là thiết bị của bạn.",
-        "success"
-      );
-
-      beep(820, 0.08);
-
-      setTimeout(
-        () => beep(1040, 0.09),
-        80
-      );
-    } catch (_) {
-      setStatus(
-        "LỖI KẾT NỐI",
-        "Không thể kết nối máy chủ Render.",
-        "error"
-      );
-
-      beep(150, 0.14);
-    } finally {
-      checkBtn.disabled = false;
-      activateBtn.disabled = false;
     }
-  }
-);
+  );
+}
 
 /* =========================
    KÍCH HOẠT KEY
-   Bind device + nhận session
+   BIND DEVICE + SESSION
 ========================= */
 
-activateBtn.addEventListener(
-  "click",
-  async () => {
-    beep();
+if (activateBtn) {
+  activateBtn.addEventListener(
+    "click",
+    async () => {
+      hkSound("activate");
 
-    const key =
-      validateInput();
+      const key =
+        validateInput();
 
-    if (!key) return;
+      if (!key) return;
 
-    checkBtn.disabled = true;
-    activateBtn.disabled = true;
+      checkBtn.disabled = true;
+      activateBtn.disabled = true;
 
-    setStatus(
-      "ĐANG KÍCH HOẠT",
-      "Đang gắn key với thiết bị này..."
-    );
+      setStatus(
+        "ĐANG KÍCH HOẠT",
+        "Đang gắn key với thiết bị này..."
+      );
 
-    try {
-      const {
-        response,
-        data
-      } = await api(
-        "/activate",
-        {
-          key,
-          deviceId:
-            getDeviceId()
+      try {
+        const {
+          response,
+          data
+        } = await api(
+          "/activate",
+          {
+            key,
+            deviceId:
+              getDeviceId()
+          }
+        );
+
+        if (
+          !response.ok ||
+          !data.valid
+        ) {
+          setStatus(
+            errorText(
+              data.code,
+              data.message
+            ),
+            "Thiết bị này không được phép sử dụng key.",
+            "error"
+          );
+
+          hkSound("error");
+
+          return;
         }
-      );
 
-      if (
-        !response.ok ||
-        !data.valid
-      ) {
+        /* =========================
+           NHẬN SESSION TOKEN
+        ========================= */
+
+        if (
+          !data.sessionToken
+        ) {
+          setStatus(
+            "THIẾU SESSION",
+            "Máy chủ chưa cấp phiên đăng nhập.",
+            "error"
+          );
+
+          hkSound("error");
+
+          return;
+        }
+
+        /* =========================
+           LƯU SESSION VĨNH VIỄN
+        ========================= */
+
+        const saved =
+          saveSession(
+            data.sessionToken
+          );
+
+        if (!saved) {
+          setStatus(
+            "KHÔNG LƯU ĐƯỢC SESSION",
+            "Trình duyệt không cho phép lưu phiên đăng nhập.",
+            "error"
+          );
+
+          hkSound("error");
+
+          return;
+        }
+
+        /* =========================
+           KIỂM TRA SESSION VỪA LƯU
+        ========================= */
+
+        const savedToken =
+          getSession();
+
+        if (
+          !savedToken ||
+          savedToken !==
+            data.sessionToken
+        ) {
+          setStatus(
+            "SESSION KHÔNG HỢP LỆ",
+            "Không thể xác nhận phiên đăng nhập.",
+            "error"
+          );
+
+          hkSound("error");
+
+          return;
+        }
+
+        showDetails(
+          data,
+          "ĐÃ KÍCH HOẠT"
+        );
+
         setStatus(
-          errorText(
-            data.code,
-            data.message
-          ),
-          "Thiết bị này không được phép sử dụng key.",
+          "KÍCH HOẠT THÀNH CÔNG",
+          "Đang mở app chính...",
+          "success"
+        );
+
+        hkSound("success");
+
+        /* =========================
+           CHUYỂN APP CHÍNH
+        ========================= */
+
+        setTimeout(
+          () => {
+            window.location.href =
+              "main.html";
+          },
+          700
+        );
+      } catch (_) {
+        setStatus(
+          "LỖI KẾT NỐI",
+          "Không thể kết nối máy chủ Render.",
           "error"
         );
 
-        beep(150, 0.14);
-        return;
+        hkSound("error");
+      } finally {
+        checkBtn.disabled = false;
+        activateBtn.disabled = false;
       }
-
-      /* =========================
-         SESSION
-      ========================= */
-
-      if (!data.sessionToken) {
-        setStatus(
-          "THIẾU SESSION",
-          "Máy chủ chưa cấp phiên đăng nhập.",
-          "error"
-        );
-
-        beep(150, 0.14);
-        return;
-      }
-
-      sessionStorage.setItem(
-        "hk_session",
-        data.sessionToken
-      );
-
-      showDetails(
-        data,
-        "ĐÃ KÍCH HOẠT"
-      );
-
-      setStatus(
-        "KÍCH HOẠT THÀNH CÔNG",
-        "Đang mở app chính...",
-        "success"
-      );
-
-      hkSound("success");
-
-      setTimeout(() => {
-        window.location.href =
-          "main.html";
-      }, 600);
-
-    } catch (_) {
-      setStatus(
-        "LỖI KẾT NỐI",
-        "Không thể kết nối máy chủ Render.",
-        "error"
-      );
-
-      beep(150, 0.14);
-    } finally {
-      checkBtn.disabled = false;
-      activateBtn.disabled = false;
     }
-  }
-);
+  );
+}
 
 /* =========================
    PASTE
 ========================= */
 
-pasteBtn.addEventListener(
-  "click",
-  async () => {
-    beep(560);
+if (pasteBtn) {
+  pasteBtn.addEventListener(
+    "click",
+    async () => {
+      hkSound("click");
 
-    try {
-      keyInput.value =
-        (
-          await navigator.clipboard
-            .readText()
-        )
-          .trim()
-          .toUpperCase();
+      try {
+        const text =
+          await navigator
+            .clipboard
+            .readText();
 
-      setStatus(
-        "ĐÃ DÁN KEY",
-        "Bấm Kiểm tra key để xem HSD.",
-        ""
-      );
-    } catch (_) {
-      setStatus(
-        "KHÔNG THỂ DÁN",
-        "Trình duyệt không cho phép truy cập clipboard.",
-        "error"
-      );
+        keyInput.value =
+          String(text || "")
+            .trim()
+            .toUpperCase();
+
+        setStatus(
+          "ĐÃ DÁN KEY",
+          "Bấm Kiểm tra key để xem HSD.",
+          ""
+        );
+      } catch (_) {
+        setStatus(
+          "KHÔNG THỂ DÁN",
+          "Trình duyệt không cho phép truy cập clipboard.",
+          "error"
+        );
+
+        hkSound("error");
+      }
     }
-  }
-);
+  );
+}
 
 /* =========================
    CLEAR
 ========================= */
 
-clearBtn.addEventListener(
-  "click",
-  () => {
-    beep(420);
+if (clearBtn) {
+  clearBtn.addEventListener(
+    "click",
+    () => {
+      hkSound("click");
 
-    keyInput.value = "";
+      if (keyInput) {
+        keyInput.value = "";
+      }
 
-    keyDetails.classList.add(
-      "hidden"
-    );
+      if (keyDetails) {
+        keyDetails.classList.add(
+          "hidden"
+        );
+      }
 
-    setStatus(
-      "Sẵn sàng.",
-      "Chưa Kích Hoạt"
-    );
+      setStatus(
+        "SẴN SÀNG",
+        "Chưa Kích Hoạt"
+      );
 
-    keyInput.focus();
-  }
-);
+      if (keyInput) {
+        keyInput.focus();
+      }
+    }
+  );
+}
 
 /* =========================
    INPUT
 ========================= */
 
-keyInput.addEventListener(
-  "input",
-  () => {
-    keyInput.value =
-      keyInput.value.toUpperCase();
-  }
-);
-
-keyInput.addEventListener(
-  "keydown",
-  e => {
-    if (e.key === "Enter") {
-      checkBtn.click();
+if (keyInput) {
+  keyInput.addEventListener(
+    "input",
+    () => {
+      keyInput.value =
+        keyInput.value.toUpperCase();
     }
-  }
-);
+  );
+
+  keyInput.addEventListener(
+    "keydown",
+    e => {
+      if (e.key === "Enter") {
+        if (checkBtn) {
+          checkBtn.click();
+        }
+      }
+    }
+  );
+}
 
 /* =========================
-   BUTTON SOUND
+   BUTTON SOUND FALLBACK
 ========================= */
 
 document.addEventListener(
@@ -670,13 +840,17 @@ document.addEventListener(
       )
     ) {
       hkSound("click");
-    } else if (
+    }
+
+    else if (
       label.includes(
         "KÍCH HOẠT"
       )
     ) {
       hkSound("activate");
-    } else if (
+    }
+
+    else if (
       label.includes(
         "LIÊN HỆ LẤY KEY"
       )
