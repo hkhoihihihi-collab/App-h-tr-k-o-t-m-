@@ -1,3 +1,55 @@
+
+/* =========================
+   PHONE-LIKE UI SOUNDS
+========================= */
+let hkAudioCtx = null;
+
+function hkAudio() {
+  if (!hkAudioCtx) {
+    hkAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (hkAudioCtx.state === "suspended") hkAudioCtx.resume();
+  return hkAudioCtx;
+}
+
+function hkTone(freq, duration = 0.12, delay = 0, volume = 0.045) {
+  const ctx = hkAudio();
+  const now = ctx.currentTime + delay;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(freq, now);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + duration + 0.02);
+}
+
+function hkSound(type) {
+  try {
+    if (type === "click") {
+      hkTone(880, 0.07);
+      hkTone(1175, 0.09, 0.055);
+    } else if (type === "success") {
+      hkTone(784, 0.10);
+      hkTone(988, 0.10, 0.085);
+      hkTone(1175, 0.15, 0.17);
+    } else if (type === "error") {
+      hkTone(440, 0.11);
+      hkTone(330, 0.15, 0.10);
+    } else if (type === "activate") {
+      hkTone(659, 0.10);
+      hkTone(784, 0.10, 0.09);
+      hkTone(988, 0.12, 0.18);
+    }
+  } catch (_) {}
+}
+
 const API = "https://hk-key-manager.onrender.com/api";
 
 const keyInput = document.getElementById("keyInput");
@@ -206,4 +258,15 @@ keyInput.addEventListener("input", ()=>{
 
 keyInput.addEventListener("keydown", e=>{
   if(e.key === "Enter") checkBtn.click();
+});
+
+/* delegated fallback */
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("button, a");
+  if (!btn) return;
+  const label = (btn.textContent || "").trim().toUpperCase();
+  if (label.includes("KIỂM TRA KEY")) hkSound("click");
+  else if (label.includes("KÍCH HOẠT")) hkSound("activate");
+  else if (label.includes("LIÊN HỆ LẤY KEY")) hkSound("click");
 });
