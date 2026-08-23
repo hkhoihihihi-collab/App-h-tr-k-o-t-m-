@@ -117,7 +117,7 @@ features.forEach(([name, description]) => {
 
 async function verifySession() {
   const token =
-    sessionStorage.getItem("hk_session");
+    localStorage.getItem("hk_session");
 
   if (!token) {
     window.location.href = "index.html";
