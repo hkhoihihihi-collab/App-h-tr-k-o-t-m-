@@ -16,6 +16,39 @@ if (!ADMIN_PASSWORD) {
   process.exit(1);
 }
 
+/*
+  SESSION FIX
+  Session token is stored with the key record instead of only in RAM.
+  Render restart/redeploy will therefore not invalidate a valid session.
+*/
+
+function createSession(key, deviceId) {
+  const token = crypto.randomBytes(32).toString("hex");
+
+  key.sessionToken = token;
+  key.sessionDeviceId = deviceId;
+  key.sessionCreatedAt = new Date().toISOString();
+
+  return token;
+}
+
+function clearKeySession(key) {
+  if (!key) return;
+  delete key.sessionToken;
+  delete key.sessionDeviceId;
+  delete key.sessionCreatedAt;
+}
+
+function verifySessionToken(keys, token) {
+  if (!token) return null;
+
+  return keys.find(
+    key =>
+      key.sessionToken &&
+      key.sessionToken === token
+  ) || null;
+}
+
 /* =========================
    CORS
 ========================= */
@@ -47,9 +80,7 @@ app.use(express.static(ROOT));
 
 function loadKeys() {
   try {
-    if (!fs.existsSync(DB)) {
-      return [];
-    }
+    if (!fs.existsSync(DB)) return [];
 
     const data = JSON.parse(
       fs.readFileSync(DB, "utf8")
@@ -105,9 +136,7 @@ function expiration(type, custom) {
     "1y": 31536000000
   };
 
-  if (type === "forever") {
-    return null;
-  }
+  if (type === "forever") return null;
 
   if (type === "custom") {
     const timestamp = new Date(custom).getTime();
@@ -170,8 +199,7 @@ function validateKey(key) {
   if (
     key.expiresAt !== null &&
     key.expiresAt &&
-    Date.now() >=
-      new Date(key.expiresAt).getTime()
+    Date.now() >= new Date(key.expiresAt).getTime()
   ) {
     return {
       valid: false,
@@ -180,80 +208,7 @@ function validateKey(key) {
     };
   }
 
-  return {
-    valid: true
-  };
-}
-
-/* =========================
-   SESSION STORAGE
-   Lưu trực tiếp trong keys.json
-   Không timeout.
-========================= */
-
-function createSession(key, deviceId) {
-  const keys = loadKeys();
-
-  const currentKey = keys.find(
-    x => x.id === key.id
-  );
-
-  if (!currentKey) {
-    return null;
-  }
-
-  const token =
-    crypto.randomBytes(48).toString("hex");
-
-  currentKey.sessionToken = token;
-  currentKey.sessionDeviceId = deviceId;
-  currentKey.sessionCreatedAt =
-    new Date().toISOString();
-
-  saveKeys(keys);
-
-  return token;
-}
-
-function findSession(token) {
-  if (!token) {
-    return null;
-  }
-
-  const keys = loadKeys();
-
-  const key = keys.find(
-    x => x.sessionToken === token
-  );
-
-  if (!key) {
-    return null;
-  }
-
-  return {
-    key,
-    deviceId: key.sessionDeviceId || null,
-    createdAt:
-      key.sessionCreatedAt || null
-  };
-}
-
-function deleteSessionForKey(keyId) {
-  const keys = loadKeys();
-
-  const key = keys.find(
-    x => x.id === keyId
-  );
-
-  if (!key) {
-    return;
-  }
-
-  delete key.sessionToken;
-  delete key.sessionDeviceId;
-  delete key.sessionCreatedAt;
-
-  saveKeys(keys);
+  return { valid: true };
 }
 
 /* =========================
@@ -277,51 +232,50 @@ function adminAuth(req, res, next) {
 }
 
 /* =========================
-   ADMIN
+   ADMIN: LIST
 ========================= */
 
-app.get(
-  "/api/keys",
-  adminAuth,
-  (req, res) => {
-    res.json(loadKeys());
-  }
-);
+app.get("/api/keys", adminAuth, (req, res) => {
+  res.json(loadKeys());
+});
 
-app.post(
-  "/api/keys",
-  adminAuth,
-  (req, res) => {
-    const keys = loadKeys();
+/* =========================
+   ADMIN: CREATE
+========================= */
 
-    const type = String(
-      req.body.duration || "30d"
-    );
+app.post("/api/keys", adminAuth, (req, res) => {
+  const keys = loadKeys();
 
-    const key = {
-      id: crypto.randomUUID(),
-      key: makeKey(),
-      createdAt:
-        new Date().toISOString(),
-      expiresAt: expiration(
-        type,
-        req.body.custom
-      ),
-      disabled: false,
-      deviceId: null,
-      boundAt: null,
+  const type = String(
+    req.body.duration || "30d"
+  );
 
-      sessionToken: null,
-      sessionDeviceId: null,
-      sessionCreatedAt: null
-    };
+  const key = {
+    id: crypto.randomUUID(),
+    key: makeKey(),
+    appId: String(req.body.appId || "all"),
+    createdAt: new Date().toISOString(),
+    expiresAt: expiration(
+      type,
+      req.body.custom
+    ),
+    disabled: false,
+    deviceId: null,
+    boundAt: null,
+    sessionToken: null,
+    sessionDeviceId: null,
+    sessionCreatedAt: null
+  };
 
-    keys.push(key);
-    saveKeys(keys);
+  keys.push(key);
+  saveKeys(keys);
 
-    res.json(key);
-  }
-);
+  res.json(key);
+});
+
+/* =========================
+   ADMIN: UPDATE
+========================= */
 
 app.patch(
   "/api/keys/:id",
@@ -345,25 +299,30 @@ app.patch(
         "disabled"
       )
     ) {
-      key.disabled =
-        Boolean(req.body.disabled);
+      key.disabled = Boolean(
+        req.body.disabled
+      );
 
       if (key.disabled) {
-        delete key.sessionToken;
-        delete key.sessionDeviceId;
-        delete key.sessionCreatedAt;
+        clearKeySession(key);
       }
     }
 
-    if (
-      req.body.resetDevice === true
-    ) {
+    if (req.body.resetDevice === true) {
       key.deviceId = null;
       key.boundAt = null;
+      clearKeySession(key);
+    }
 
-      delete key.sessionToken;
-      delete key.sessionDeviceId;
-      delete key.sessionCreatedAt;
+    if (
+      Object.prototype.hasOwnProperty.call(
+        req.body,
+        "appId"
+      )
+    ) {
+      key.appId = String(
+        req.body.appId || "all"
+      );
     }
 
     saveKeys(keys);
@@ -371,6 +330,10 @@ app.patch(
     res.json(key);
   }
 );
+
+/* =========================
+   ADMIN: DELETE
+========================= */
 
 app.delete(
   "/api/keys/:id",
@@ -388,363 +351,109 @@ app.delete(
       });
     }
 
-    const filtered = keys.filter(
-      x => x.id !== req.params.id
+    saveKeys(
+      keys.filter(
+        x => x.id !== req.params.id
+      )
     );
 
-    saveKeys(filtered);
-
-    res.json({
-      ok: true
-    });
+    res.json({ ok: true });
   }
 );
 
 /* =========================
    CHECK KEY
-   Không bind device
 ========================= */
 
-app.post(
-  "/api/check",
-  (req, res) => {
-    const {
-      key,
-      deviceId
-    } = req.body;
+app.post("/api/check", (req, res) => {
+  const keyInput = req.body.key;
+  const deviceId = String(
+    req.body.deviceId || ""
+  ).trim();
 
-    if (!key) {
-      return res.status(400).json({
-        valid: false,
-        code: "KEY_REQUIRED",
-        message: "Key is required"
-      });
-    }
-
-    const found = findKey(key);
-
-    const validation =
-      validateKey(found.key);
-
-    if (!validation.valid) {
-      return res.status(
-        validation.code ===
-          "INVALID_KEY"
-          ? 404
-          : 403
-      ).json(validation);
-    }
-
-    const deviceBound =
-      Boolean(found.key.deviceId);
-
-    return res.json({
-      valid: true,
-      deviceBound,
-      deviceId:
-        found.key.deviceId || null,
-      sameDevice:
-        Boolean(deviceId) &&
-        Boolean(found.key.deviceId) &&
-        found.key.deviceId ===
-          String(deviceId).trim(),
-      expiresAt:
-        found.key.expiresAt
+  if (!keyInput) {
+    return res.status(400).json({
+      valid: false,
+      code: "KEY_REQUIRED",
+      message: "Key is required"
     });
   }
-);
+
+  const found = findKey(keyInput);
+  const validation =
+    validateKey(found.key);
+
+  if (!validation.valid) {
+    return res.status(
+      validation.code === "INVALID_KEY"
+        ? 404
+        : 403
+    ).json(validation);
+  }
+
+  const key = found.key;
+
+  res.json({
+    valid: true,
+    deviceBound: Boolean(key.deviceId),
+    deviceId: key.deviceId || null,
+    sameDevice:
+      Boolean(deviceId) &&
+      Boolean(key.deviceId) &&
+      key.deviceId === deviceId,
+    expiresAt: key.expiresAt
+  });
+});
 
 /* =========================
-   ACTIVATE KEY
-   Bind device + session
+   ACTIVATE
 ========================= */
 
-app.post(
-  "/api/activate",
-  (req, res) => {
-    const input = String(
-      req.body.key || ""
-    )
-      .trim()
-      .toUpperCase();
+app.post("/api/activate", (req, res) => {
+  const input = String(
+    req.body.key || ""
+  ).trim().toUpperCase();
 
-    const deviceId = String(
-      req.body.deviceId || ""
-    ).trim();
+  const deviceId = String(
+    req.body.deviceId || ""
+  ).trim();
 
-    if (!input) {
-      return res.status(400).json({
-        valid: false,
-        code: "KEY_REQUIRED",
-        message: "Key is required"
-      });
-    }
-
-    if (!deviceId) {
-      return res.status(400).json({
-        valid: false,
-        code: "DEVICE_REQUIRED",
-        message: "Device ID is required"
-      });
-    }
-
-    const found = findKey(input);
-
-    const validation =
-      validateKey(found.key);
-
-    if (!validation.valid) {
-      return res.status(
-        validation.code ===
-          "INVALID_KEY"
-          ? 404
-          : 403
-      ).json(validation);
-    }
-
-    const key = found.key;
-
-    const firstActivation =
-      !key.deviceId;
-
-    if (firstActivation) {
-      key.deviceId = deviceId;
-      key.boundAt =
-        new Date().toISOString();
-
-      saveKeys(found.keys);
-    }
-
-    if (
-      key.deviceId !== deviceId
-    ) {
-      return res.status(403).json({
-        valid: false,
-        code: "DEVICE_MISMATCH",
-        message:
-          "Key is already activated on another device"
-      });
-    }
-
-    const sessionToken =
-      createSession(
-        key,
-        deviceId
-      );
-
-    if (!sessionToken) {
-      return res.status(500).json({
-        valid: false,
-        code: "SESSION_CREATE_FAILED",
-        message:
-          "Could not create session"
-      });
-    }
-
-    return res.json({
-      valid: true,
-      firstActivation,
-      deviceBound: true,
-      expiresAt:
-        key.expiresAt,
-      sessionToken
+  if (!input) {
+    return res.status(400).json({
+      valid: false,
+      code: "KEY_REQUIRED",
+      message: "Key is required"
     });
   }
-);
 
-/* =========================
-   VERIFY SESSION
-   Không timeout.
-========================= */
-
-app.post(
-  "/api/session",
-  (req, res) => {
-    const authorization =
-      req.headers.authorization || "";
-
-    const token =
-      authorization.startsWith(
-        "Bearer "
-      )
-        ? authorization
-            .slice(7)
-            .trim()
-        : "";
-
-    if (!token) {
-      return res.status(401).json({
-        valid: false,
-        code: "SESSION_REQUIRED",
-        message:
-          "Session token is required"
-      });
-    }
-
-    const session =
-      findSession(token);
-
-    if (!session) {
-      return res.status(401).json({
-        valid: false,
-        code: "SESSION_INVALID",
-        message:
-          "Invalid session"
-      });
-    }
-
-    const key = session.key;
-
-    const validation =
-      validateKey(key);
-
-    if (!validation.valid) {
-      deleteSessionForKey(key.id);
-
-      return res.status(403).json({
-        valid: false,
-        code: validation.code,
-        message: validation.message
-      });
-    }
-
-    if (
-      !key.deviceId ||
-      !session.deviceId ||
-      key.deviceId !==
-        session.deviceId
-    ) {
-      deleteSessionForKey(key.id);
-
-      return res.status(403).json({
-        valid: false,
-        code: "DEVICE_MISMATCH",
-        message:
-          "Session device mismatch"
-      });
-    }
-
-    return res.json({
-      valid: true,
-      expiresAt:
-        key.expiresAt
+  if (!deviceId) {
+    return res.status(400).json({
+      valid: false,
+      code: "DEVICE_REQUIRED",
+      message: "Device ID is required"
     });
   }
-);
 
-/* =========================
-   LOGOUT
-========================= */
+  const found = findKey(input);
+  const validation =
+    validateKey(found.key);
 
-app.post(
-  "/api/logout",
-  (req, res) => {
-    const authorization =
-      req.headers.authorization || "";
-
-    const token =
-      authorization.startsWith(
-        "Bearer "
-      )
-        ? authorization
-            .slice(7)
-            .trim()
-        : "";
-
-    const session =
-      findSession(token);
-
-    if (session) {
-      deleteSessionForKey(
-        session.key.id
-      );
-    }
-
-    res.json({
-      ok: true
-    });
+  if (!validation.valid) {
+    return res.status(
+      validation.code === "INVALID_KEY"
+        ? 404
+        : 403
+    ).json(validation);
   }
-);
 
-/* =========================
-   OLD VERIFY API
-   Giữ tương thích app cũ
-========================= */
+  const key = found.key;
 
-app.post(
-  "/api/verify",
-  (req, res) => {
-    const input = String(
-      req.body.key || ""
-    )
-      .trim()
-      .toUpperCase();
+  if (!key.deviceId) {
+    key.deviceId = deviceId;
+    key.boundAt = new Date().toISOString();
+  }
 
-    const deviceId = String(
-      req.body.deviceId || ""
-    ).trim();
-
-    if (!input) {
-      return res.status(400).json({
-        valid: false,
-        code: "KEY_REQUIRED",
-        message: "Key is required"
-      });
-    }
-
-    if (!deviceId) {
-      return res.status(400).json({
-        valid: false,
-        code: "DEVICE_REQUIRED",
-        message:
-          "Device ID is required"
-      });
-    }
-
-    const found = findKey(input);
-
-    const validation =
-      validateKey(found.key);
-
-    if (!validation.valid) {
-      return res.status(
-        validation.code ===
-          "INVALID_KEY"
-          ? 404
-          : 403
-      ).json(validation);
-    }
-
-    const key = found.key;
-
-    if (!key.deviceId) {
-      key.deviceId = deviceId;
-      key.boundAt =
-        new Date().toISOString();
-
-      saveKeys(found.keys);
-
-      return res.json({
-        valid: true,
-        firstActivation: true,
-        deviceBound: true,
-        expiresAt:
-          key.expiresAt
-      });
-    }
-
-    if (
-      key.deviceId === deviceId
-    ) {
-      return res.json({
-        valid: true,
-        firstActivation: false,
-        deviceBound: true,
-        expiresAt:
-          key.expiresAt
-      });
-    }
-
+  if (key.deviceId !== deviceId) {
     return res.status(403).json({
       valid: false,
       code: "DEVICE_MISMATCH",
@@ -752,37 +461,221 @@ app.post(
         "Key is already activated on another device"
     });
   }
-);
+
+  const sessionToken =
+    createSession(
+      key,
+      deviceId
+    );
+
+  saveKeys(found.keys);
+
+  return res.json({
+    valid: true,
+    firstActivation:
+      Boolean(
+        key.boundAt &&
+        key.sessionCreatedAt === key.boundAt
+      ),
+    deviceBound: true,
+    expiresAt: key.expiresAt,
+    sessionToken
+  });
+});
+
+/* =========================
+   SESSION
+   Persistent across Render restart.
+   Still invalidates on:
+   - expired key
+   - disabled key
+   - deleted key
+   - device mismatch
+========================= */
+
+app.post("/api/session", (req, res) => {
+  const auth =
+    req.headers.authorization || "";
+
+  const token =
+    auth.startsWith("Bearer ")
+      ? auth.slice(7).trim()
+      : "";
+
+  if (!token) {
+    return res.status(401).json({
+      valid: false,
+      code: "SESSION_REQUIRED",
+      message: "Session required"
+    });
+  }
+
+  const keys = loadKeys();
+  const key =
+    verifySessionToken(keys, token);
+
+  if (!key) {
+    return res.status(401).json({
+      valid: false,
+      code: "SESSION_INVALID",
+      message: "Invalid session"
+    });
+  }
+
+  const validation =
+    validateKey(key);
+
+  if (!validation.valid) {
+    clearKeySession(key);
+    saveKeys(keys);
+
+    return res.status(403).json({
+      valid: false,
+      code: validation.code,
+      message: validation.message
+    });
+  }
+
+  if (
+    !key.deviceId ||
+    !key.sessionDeviceId ||
+    key.deviceId !== key.sessionDeviceId
+  ) {
+    clearKeySession(key);
+    saveKeys(keys);
+
+    return res.status(403).json({
+      valid: false,
+      code: "DEVICE_MISMATCH",
+      message: "Session device mismatch"
+    });
+  }
+
+  return res.json({
+    valid: true,
+    expiresAt: key.expiresAt
+  });
+});
+
+/* =========================
+   LOGOUT
+========================= */
+
+app.post("/api/logout", (req, res) => {
+  const auth =
+    req.headers.authorization || "";
+
+  const token =
+    auth.startsWith("Bearer ")
+      ? auth.slice(7).trim()
+      : "";
+
+  const keys = loadKeys();
+  const key =
+    verifySessionToken(keys, token);
+
+  if (key) {
+    clearKeySession(key);
+    saveKeys(keys);
+  }
+
+  res.json({ ok: true });
+});
+
+/* =========================
+   OLD VERIFY API
+========================= */
+
+app.post("/api/verify", (req, res) => {
+  const input = String(
+    req.body.key || ""
+  ).trim().toUpperCase();
+
+  const deviceId = String(
+    req.body.deviceId || ""
+  ).trim();
+
+  if (!input) {
+    return res.status(400).json({
+      valid: false,
+      code: "KEY_REQUIRED",
+      message: "Key is required"
+    });
+  }
+
+  if (!deviceId) {
+    return res.status(400).json({
+      valid: false,
+      code: "DEVICE_REQUIRED",
+      message: "Device ID is required"
+    });
+  }
+
+  const found = findKey(input);
+  const validation =
+    validateKey(found.key);
+
+  if (!validation.valid) {
+    return res.status(
+      validation.code === "INVALID_KEY"
+        ? 404
+        : 403
+    ).json(validation);
+  }
+
+  const key = found.key;
+
+  if (!key.deviceId) {
+    key.deviceId = deviceId;
+    key.boundAt = new Date().toISOString();
+    saveKeys(found.keys);
+
+    return res.json({
+      valid: true,
+      firstActivation: true,
+      deviceBound: true,
+      expiresAt: key.expiresAt
+    });
+  }
+
+  if (key.deviceId === deviceId) {
+    return res.json({
+      valid: true,
+      firstActivation: false,
+      deviceBound: true,
+      expiresAt: key.expiresAt
+    });
+  }
+
+  return res.status(403).json({
+    valid: false,
+    code: "DEVICE_MISMATCH",
+    message:
+      "Key is already activated on another device"
+  });
+});
 
 /* =========================
    HEALTH
 ========================= */
 
-app.get(
-  "/api/health",
-  (req, res) => {
-    res.json({
-      ok: true,
-      service:
-        "hk-key-manager",
-      system:
-        "1-key-1-device",
-      session:
-        "persistent-until-key-invalid"
-    });
-  }
-);
+app.get("/api/health", (req, res) => {
+  res.json({
+    ok: true,
+    service: "hk-key-manager",
+    system: "1-key-1-device",
+    session:
+      "persistent-in-keys.json-until-key-invalid",
+    version: "4"
+  });
+});
 
 /* =========================
    START
 ========================= */
 
-app.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-    console.log(
-      `HK Key Manager running on ${PORT}`
-    );
-  }
-);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(
+    `HK Key Manager running on ${PORT}`
+  );
+});
